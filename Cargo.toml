@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 stderrlog = "0.6.0"
 log = "0.4.20"
+backtrace = "0.3.69"
