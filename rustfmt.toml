@@ -1,0 +1,3 @@
+# See https://rust-lang.github.io/rustfmt/?version=master
+
+max_width = 120
