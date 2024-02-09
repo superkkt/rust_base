@@ -6,6 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-stderrlog = "0.6.0"
-log = "0.4.20"
+log = { version = "0.4.20", features = ["std"] }
 backtrace = "0.3.69"
+chrono = "0.4"
