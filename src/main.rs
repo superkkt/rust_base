@@ -1,8 +1,13 @@
+mod configuration;
 mod logger;
 
-fn main() {
-    init_logger(log::LevelFilter::Debug);
+use anyhow::{Context, Result};
+
+fn main() -> Result<()> {
+    let config = configuration::load().context("failed to load the configuration")?;
+    init_logger(config.log.level);
     log::debug!("Hello World!");
+    Ok(())
 }
 
 fn init_logger(level: log::LevelFilter) {
