@@ -29,7 +29,7 @@ pub fn load() -> Result<Configuation> {
 
 struct LogLevelVisitor;
 
-impl<'de> Visitor<'de> for LogLevelVisitor {
+impl Visitor<'_> for LogLevelVisitor {
     type Value = log::LevelFilter;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -51,9 +51,9 @@ impl<'de> Visitor<'de> for LogLevelVisitor {
     }
 }
 
-fn deserialize_log_level<'de, D>(deserializer: D) -> Result<log::LevelFilter, D::Error>
+fn deserialize_log_level<'a, D>(deserializer: D) -> Result<log::LevelFilter, D::Error>
 where
-    D: Deserializer<'de>,
+    D: Deserializer<'a>,
 {
     deserializer.deserialize_str(LogLevelVisitor)
 }
