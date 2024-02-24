@@ -16,6 +16,17 @@ pub struct Configuation {
 pub struct Log {
     #[serde(deserialize_with = "deserialize_log_level")]
     pub level: log::LevelFilter,
+    pub database: Database,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Database {
+    pub driver: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
+    pub name: String,
 }
 
 pub fn load() -> Result<Configuation> {

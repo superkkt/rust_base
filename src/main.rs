@@ -1,4 +1,6 @@
 mod configuration;
+mod database;
+mod entity;
 mod logger;
 
 use anyhow::{Context, Result};
