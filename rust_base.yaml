@@ -8,3 +8,8 @@ database:
   username: "username"
   password: "password"
   name: "name"
+
+http:
+  port: 443
+  tls_cert_file: "/path/cert_file"
+  tls_key_file: "/path/key_file"

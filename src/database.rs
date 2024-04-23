@@ -1,4 +1,4 @@
-mod mysql;
+pub mod mysql;
 
 pub struct Configuration {
     pub host: String,

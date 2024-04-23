@@ -1,13 +1,13 @@
+use crate::core::{CreateUserParams, DatabaseClient, DatabaseTransaction, User};
 use crate::database::Configuration;
-use crate::entity::{DatabaseClient, DatabaseTransaction};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use mysql_async::TxOpts;
+use std::any::Any;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
-
-mod user;
 
 pub struct Client {
     pool: mysql_async::Pool,
@@ -31,6 +31,7 @@ impl Client {
     }
 }
 
+#[derive(Debug)]
 struct Transaction<'a> {
     handle: mysql_async::Transaction<'a>,
 }
@@ -51,25 +52,32 @@ fn get_mysql_error_code(err: &anyhow::Error) -> Option<u16> {
 
 #[async_trait]
 impl DatabaseClient for Client {
-    async fn invoke<C>(&self, mut callback: C) -> Result<()>
-    where
-        C: FnMut(&dyn DatabaseTransaction) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send,
-    {
-        let mut conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("failed to get a database connection from the pool")?;
+    async fn invoke(
+        &self,
+        mut callback: Box<
+            dyn FnMut(
+                    Arc<Box<dyn DatabaseTransaction + Send + Sync>>,
+                ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>
+                + Send,
+        >,
+    ) -> Result<()> {
         let mut deadlock_count: usize = 0;
 
         loop {
-            let tx = conn
+            let tx = self
+                .pool
                 .start_transaction(TxOpts::default())
                 .await
                 .context("failed to start a database transaction")?;
             let tx = Transaction { handle: tx };
+            let tx = Arc::new(Box::new(tx) as Box<(dyn DatabaseTransaction + Send + Sync)>);
 
-            let result = callback(&tx).await;
+            let result = callback(tx.clone()).await;
+
+            let tx: Box<dyn Any> = Box::new(tx);
+            let tx = tx.downcast::<Arc<Box<Transaction>>>().expect("expect Transaction type");
+            let tx = Arc::try_unwrap(*tx).unwrap();
+
             if result.is_ok() {
                 tx.handle
                     .commit()
@@ -92,7 +100,29 @@ impl DatabaseClient for Client {
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 continue;
             }
+
             return Err(err.context("failed to call the callback handler"));
         }
+    }
+}
+
+#[async_trait]
+impl DatabaseTransaction for Transaction<'_> {
+    async fn create_user(&self, params: CreateUserParams) -> Result<User> {
+        log::debug!("create_user: params = {:?}", params);
+        // TODO: DB query.
+        Ok(User {
+            id: 0,
+            username: String::from(""),
+            password: String::from(""),
+            age: 0,
+            address: String::from(""),
+        })
+    }
+
+    async fn remove_user(&self, id: u64) -> Result<()> {
+        log::debug!("remove_user: id = {id}");
+        // TODO: DB query.
+        Ok(())
     }
 }

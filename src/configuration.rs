@@ -10,13 +10,14 @@ const DEFAULT_CONFIG_FILE_PATH: &str = "/etc/rust_base.yaml";
 #[derive(Debug, Deserialize)]
 pub struct Configuation {
     pub log: Log,
+    pub database: Database,
+    pub http: HTTP,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Log {
     #[serde(deserialize_with = "deserialize_log_level")]
     pub level: log::LevelFilter,
-    pub database: Database,
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,6 +28,13 @@ pub struct Database {
     pub username: String,
     pub password: String,
     pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HTTP {
+    pub port: u16,
+    pub tls_cert_file: String,
+    pub tls_key_file: String,
 }
 
 pub fn load() -> Result<Configuation> {
