@@ -31,6 +31,7 @@ async fn create_user(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateUserParams>,
 ) -> Json<CreateUserResponse> {
+    log::debug!("create_user invoked");
     return match state.controller.create_user(payload).await {
         Ok(user) => {
             let response = CreateUserResponse {
@@ -39,7 +40,8 @@ async fn create_user(
             };
             Json(response)
         }
-        Err(_) => {
+        Err(err) => {
+            log::error!("failed to create a user: {:?}", err);
             let response = CreateUserResponse { code: 500, user: None };
             Json(response)
         }

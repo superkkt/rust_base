@@ -2,11 +2,10 @@ use crate::core::{CreateUserParams, DatabaseClient, DatabaseTransaction, User};
 use crate::database::Configuration;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use mysql_async::TxOpts;
-use std::any::Any;
+use mysql_async::prelude::Queryable;
+use mysql_async::{params, TxOpts};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 
 pub struct Client {
@@ -31,11 +30,6 @@ impl Client {
     }
 }
 
-#[derive(Debug)]
-struct Transaction<'a> {
-    handle: mysql_async::Transaction<'a>,
-}
-
 const MYSQL_DEADLOCK_ERROR_CODE: u16 = 1213;
 const MAX_DEADLOCK_RETRY: usize = 5;
 
@@ -55,62 +49,61 @@ impl DatabaseClient for Client {
     async fn invoke(
         &self,
         mut callback: Box<
-            dyn FnMut(
-                    Arc<Box<dyn DatabaseTransaction + Send + Sync>>,
-                ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>
+            dyn for<'a> FnMut(
+                    &'a mut (dyn DatabaseTransaction + Send + Sync),
+                ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
                 + Send,
         >,
     ) -> Result<()> {
+        log::debug!("invoke executed");
         let mut deadlock_count: usize = 0;
 
         loop {
-            let tx = self
+            let mut tx = self
                 .pool
                 .start_transaction(TxOpts::default())
                 .await
                 .context("failed to start a database transaction")?;
-            let tx = Transaction { handle: tx };
-            let tx = Arc::new(Box::new(tx) as Box<(dyn DatabaseTransaction + Send + Sync)>);
 
-            let result = callback(tx.clone()).await;
+            match callback(&mut tx).await {
+                Ok(_) => {
+                    tx.commit().await.context("failed to commit a database transaction")?;
+                    return Ok(());
+                }
+                Err(err) => {
+                    let err_code = get_mysql_error_code(&err);
+                    if err_code.is_some()
+                        && err_code.unwrap() == MYSQL_DEADLOCK_ERROR_CODE
+                        && deadlock_count < MAX_DEADLOCK_RETRY
+                    {
+                        deadlock_count += 1;
+                        tx.rollback()
+                            .await
+                            .context("failed to rollback a database transaction")?;
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        continue;
+                    }
 
-            let tx: Box<dyn Any> = Box::new(tx);
-            let tx = tx.downcast::<Arc<Box<Transaction>>>().expect("expect Transaction type");
-            let tx = Arc::try_unwrap(*tx).unwrap();
-
-            if result.is_ok() {
-                tx.handle
-                    .commit()
-                    .await
-                    .context("failed to commit a database transaction")?;
-                return Ok(());
-            }
-
-            let err = result.unwrap_err();
-            let err_code = get_mysql_error_code(&err);
-            if err_code.is_some()
-                && err_code.unwrap() == MYSQL_DEADLOCK_ERROR_CODE
-                && deadlock_count < MAX_DEADLOCK_RETRY
-            {
-                deadlock_count += 1;
-                tx.handle
-                    .rollback()
-                    .await
-                    .context("failed to rollback a database transaction")?;
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                continue;
-            }
-
-            return Err(err.context("failed to call the callback handler"));
+                    return Err(err.context("failed to call the callback handler"));
+                }
+            };
         }
     }
 }
 
 #[async_trait]
-impl DatabaseTransaction for Transaction<'_> {
-    async fn create_user(&self, params: CreateUserParams) -> Result<User> {
+impl DatabaseTransaction for mysql_async::Transaction<'static> {
+    async fn create_user(&mut self, params: CreateUserParams) -> Result<User> {
         log::debug!("create_user: params = {:?}", params);
+
         // TODO: DB query.
+        let insert_query = r"INSERT INTO test (a, b) VALUES (:value1, :value2)";
+        let params = params! {
+            "value1" => "Test Data 1",
+            "value2" => "Test Data 2",
+        };
+        self.exec_drop(insert_query, params).await?;
+
         Ok(User {
             id: 0,
             username: String::from(""),
@@ -120,7 +113,7 @@ impl DatabaseTransaction for Transaction<'_> {
         })
     }
 
-    async fn remove_user(&self, id: u64) -> Result<()> {
+    async fn remove_user(&mut self, id: u64) -> Result<()> {
         log::debug!("remove_user: id = {id}");
         // TODO: DB query.
         Ok(())

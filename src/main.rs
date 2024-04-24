@@ -16,6 +16,7 @@ async fn main() -> Result<()> {
     init_logger(config.log.level);
     let db = init_database(config.database);
     let controller = Controller::new(db);
+    log::debug!("starting HTTP server...");
     http::serve(
         controller,
         config.http.port,

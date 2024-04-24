@@ -2,7 +2,6 @@ use crate::core::{CreateUserParams, DatabaseClient, DatabaseTransaction, User};
 use anyhow::Result;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 
 pub struct Controller {
     db: Box<dyn DatabaseClient + Send + Sync>,
@@ -14,9 +13,21 @@ impl Controller {
     }
 }
 
+fn constrain_callback<F>(f: F) -> F
+where
+    F: for<'a> FnMut(
+            &'a mut (dyn DatabaseTransaction + Send + Sync),
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
+        + Send,
+{
+    f
+}
+
 impl Controller {
     pub async fn create_user(&self, params: CreateUserParams) -> Result<User> {
-        let callback = move |tx: Arc<Box<dyn DatabaseTransaction + Send + Sync>>| {
+        log::debug!("create_user invoked");
+        let callback = constrain_callback(move |tx: &mut (dyn DatabaseTransaction + Send + Sync)| {
+            log::debug!("callback invoked");
             let params = params.clone();
 
             let fut = async move {
@@ -24,9 +35,8 @@ impl Controller {
                 Ok(())
             };
             Box::pin(fut) as Pin<Box<dyn Future<Output = Result<(), anyhow::Error>> + Send>>
-        };
-        let callback = Box::new(callback);
-        self.db.invoke(callback).await?;
+        });
+        self.db.invoke(Box::new(callback)).await?;
 
         // TODO: receive and return.
 
