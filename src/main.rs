@@ -5,8 +5,8 @@ mod logger;
 mod server;
 
 use anyhow::{Context, Result};
-use core::Controller;
-use core::DatabaseClient;
+use core::{Controller, DatabaseTransaction, User};
+use database::dummy::Dummy;
 use database::mysql;
 use server::http;
 
@@ -14,17 +14,7 @@ use server::http;
 async fn main() -> Result<()> {
     let config = configuration::load().context("failed to load the configuration")?;
     init_logger(config.log.level);
-    let db = init_database(config.database);
-    let controller = Controller::new(db);
-    log::debug!("starting HTTP server...");
-    http::serve(
-        controller,
-        config.http.port,
-        &config.http.tls_cert_file,
-        &config.http.tls_key_file,
-    )
-    .await
-    .context("failed to serve HTTP")?;
+    init_http_server(config).await?;
     Ok(())
 }
 
@@ -33,7 +23,7 @@ fn init_logger(level: log::LevelFilter) {
     log::set_max_level(level);
 }
 
-fn init_database(config: configuration::Database) -> Box<dyn DatabaseClient + Send + Sync> {
+fn init_mysql(config: configuration::Database) -> impl DatabaseTransaction + Send + Sync {
     let c = database::Configuration {
         host: config.host,
         port: config.port,
@@ -42,5 +32,35 @@ fn init_database(config: configuration::Database) -> Box<dyn DatabaseClient + Se
         name: config.name,
     };
 
-    Box::new(mysql::Client::new(c))
+    mysql::Client::new(c)
+}
+
+fn init_dummy() -> impl DatabaseTransaction + Send + Sync {
+    Dummy {}
+}
+
+async fn init_http_server(config: configuration::Configuration) -> Result<()> {
+    log::debug!("starting HTTP server...");
+
+    if config.database.driver.to_lowercase() == "mysql" {
+        http::serve(
+            Controller::new(init_mysql(config.database)),
+            config.http.port,
+            &config.http.tls_cert_file,
+            &config.http.tls_key_file,
+        )
+        .await
+        .context("failed to serve HTTP service")?;
+    } else {
+        http::serve(
+            Controller::new(init_dummy()),
+            config.http.port,
+            &config.http.tls_cert_file,
+            &config.http.tls_key_file,
+        )
+        .await
+        .context("failed to serve HTTP service")?;
+    }
+
+    Ok(())
 }

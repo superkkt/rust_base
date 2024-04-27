@@ -1,3 +1,4 @@
+pub mod dummy;
 pub mod mysql;
 
 pub struct Configuration {

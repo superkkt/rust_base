@@ -8,7 +8,7 @@ use std::io::Read;
 const DEFAULT_CONFIG_FILE_PATH: &str = "/etc/rust_base.yaml";
 
 #[derive(Debug, Deserialize)]
-pub struct Configuation {
+pub struct Configuration {
     pub log: Log,
     pub database: Database,
     pub http: HTTP,
@@ -37,7 +37,7 @@ pub struct HTTP {
     pub tls_key_file: String,
 }
 
-pub fn load() -> Result<Configuation> {
+pub fn load() -> Result<Configuration> {
     let mut file = File::open(DEFAULT_CONFIG_FILE_PATH)
         .context(format!("failed to open the config file: {}", DEFAULT_CONFIG_FILE_PATH))?;
     let mut contents = String::new();
@@ -74,5 +74,5 @@ fn deserialize_log_level<'a, D>(deserializer: D) -> Result<log::LevelFilter, D::
 where
     D: Deserializer<'a>,
 {
-    deserializer.deserialize_str(LogLevelVisitor)
+    deserializer.deserialize_str(LogLevelVisitor {})
 }
