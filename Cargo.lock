@@ -1758,6 +1758,7 @@ dependencies = [
  "log",
  "mysql_async",
  "rustls-pemfile",
+ "scopeguard",
  "serde",
  "serde_yaml",
  "tokio",

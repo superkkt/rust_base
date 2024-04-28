@@ -20,6 +20,7 @@ pub struct Client {
 
 #[derive(Debug)]
 struct Transaction {
+    id: u64,
     tx: mysql_async::Transaction<'static>,
     deadlock: bool,
 }
@@ -68,6 +69,27 @@ impl Client {
 
         Self { counter, pool, map }
     }
+
+    fn get_transaction(&self, tx_id: u64) -> Option<Transaction> {
+        loop {
+            match self.map.try_lock() {
+                None => continue,
+                Some(mut map) => return map.remove(&tx_id),
+            }
+        }
+    }
+
+    fn put_transaction(&self, tx: Transaction) {
+        loop {
+            match self.map.try_lock() {
+                None => continue,
+                Some(mut map) => {
+                    map.insert(tx.id, tx);
+                    return;
+                }
+            }
+        }
+    }
 }
 
 const MYSQL_DEADLOCK_ERROR_CODE: u16 = 1213;
@@ -88,38 +110,38 @@ impl DatabaseTransaction for Client {
             .await
             .context("failed to start a database transaction")?;
         let tx_id = self.counter.fetch_add(1, Ordering::SeqCst);
-        let mut map = self.map.lock().await;
-        map.insert(tx_id, Transaction { tx, deadlock: false });
+        self.put_transaction(Transaction {
+            id: tx_id,
+            tx,
+            deadlock: false,
+        });
         Ok(tx_id)
     }
 
     async fn commit(&self, tx_id: u64) -> Result<()> {
-        let mut map = self.map.lock().await;
-        let tx = map.remove(&tx_id);
-        if tx.is_none() {
-            return Err(anyhow!("unknown transaction id: {}", tx_id));
-        } else {
-            return Ok(tx.unwrap().tx.commit().await?);
+        match self.get_transaction(tx_id) {
+            Some(tx) => Ok(tx.tx.commit().await?),
+            None => Err(anyhow!("unknown transaction id: {}", tx_id)),
         }
     }
 
     async fn rollback(&self, tx_id: u64) -> Result<()> {
-        let mut map = self.map.lock().await;
-        let tx = map.remove(&tx_id);
-        if tx.is_none() {
-            return Err(anyhow!("unknown transaction id: {}", tx_id));
-        } else {
-            return Ok(tx.unwrap().tx.rollback().await?);
+        match self.get_transaction(tx_id) {
+            Some(tx) => Ok(tx.tx.rollback().await?),
+            None => Err(anyhow!("unknown transaction id: {}", tx_id)),
         }
     }
 
     async fn is_deadlock(&self, tx_id: u64) -> Result<bool> {
-        let mut map = self.map.lock().await;
-        let tx = map.get_mut(&tx_id);
-        if tx.is_none() {
-            return Err(anyhow!("unknown transaction id: {}", tx_id));
-        } else {
-            return Ok(tx.unwrap().deadlock == true);
+        match self.get_transaction(tx_id) {
+            Some(tx) => {
+                let tx = scopeguard::guard(tx, |tx| {
+                    self.put_transaction(tx);
+                });
+                let deadlock = tx.deadlock;
+                Ok(deadlock)
+            }
+            None => Err(anyhow!("unknown transaction id: {}", tx_id)),
         }
     }
 
@@ -130,28 +152,29 @@ impl DatabaseTransaction for Client {
         let params = params.into();
         log::debug!("create_user: params = {:?}", params);
 
-        let mut map = self.map.lock().await;
-        let tx = map.get_mut(&tx_id);
-        if tx.is_none() {
-            return Err(anyhow!("unknown transaction id: {}", tx_id));
+        match self.get_transaction(tx_id) {
+            Some(tx) => {
+                let mut tx = scopeguard::guard(tx, |tx| {
+                    self.put_transaction(tx);
+                });
+                // TODO: DB query.
+                let insert_query = r"INSERT INTO test (a, b) VALUES (:value1, :value2)";
+                let params = params! {
+                    "value1" => "Test Data 1",
+                    "value2" => "Test Data 2",
+                };
+                tx.exec_drop(insert_query, params).await?;
+
+                Ok(User {
+                    id: 18,
+                    username: String::from(""),
+                    password: String::from(""),
+                    age: 18,
+                    address: String::from(""),
+                })
+            }
+            None => Err(anyhow!("unknown transaction id: {}", tx_id)),
         }
-        let tx = tx.unwrap();
-
-        // TODO: DB query.
-        let insert_query = r"INSERT INTO test (a, b) VALUES (:value1, :value2)";
-        let params = params! {
-            "value1" => "Test Data 1",
-            "value2" => "Test Data 2",
-        };
-        tx.exec_drop(insert_query, params).await?;
-
-        Ok(User {
-            id: 18,
-            username: String::from(""),
-            password: String::from(""),
-            age: 18,
-            address: String::from(""),
-        })
     }
 
     async fn remove_user(&self, tx_id: u64, id: u64) -> Result<()> {

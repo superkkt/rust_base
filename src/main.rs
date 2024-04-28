@@ -5,7 +5,7 @@ mod logger;
 mod server;
 
 use anyhow::{Context, Result};
-use core::{Controller, DatabaseTransaction, User};
+use core::{Controller, DatabaseTransaction};
 use database::dummy::Dummy;
 use database::mysql;
 use server::http;
