@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use mysql_async::prelude::{FromRow, Queryable, StatementLike};
 use mysql_async::{params, Params, Row, TxOpts};
+use scopeguard::ScopeGuard;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -88,6 +89,8 @@ impl Client {
     }
 
     fn get_transaction(&self, tx_id: u64) -> Option<Transaction> {
+        log::debug!("get_transaction invoked: tx_id = {}", tx_id);
+
         loop {
             match self.map.try_lock() {
                 None => continue,
@@ -96,7 +99,27 @@ impl Client {
         }
     }
 
+    fn get_transaction_guard(
+        &self,
+        tx_id: u64,
+    ) -> Result<ScopeGuard<Transaction, Box<dyn FnOnce(Transaction) + Send + '_>>> {
+        log::debug!("get_transaction_guard invoked: tx_id = {}", tx_id);
+
+        match self.get_transaction(tx_id) {
+            None => Err(anyhow!("unknown transaction id: {}", tx_id)),
+            Some(tx) => Ok(scopeguard::guard(
+                tx,
+                Box::new(move |tx| {
+                    log::debug!("scopeguard invoked: tx_id = {}", tx.id);
+                    self.put_transaction(tx);
+                }),
+            )),
+        }
+    }
+
     fn put_transaction(&self, tx: Transaction) {
+        log::debug!("put_transaction invoked: tx_id = {}", tx.id);
+
         loop {
             match self.map.try_lock() {
                 None => continue,
@@ -121,6 +144,7 @@ fn get_mysql_error_code(err: &mysql_async::Error) -> Option<u16> {
 #[async_trait]
 impl DatabaseTransaction for Client {
     async fn begin(&self) -> Result<u64> {
+        log::debug!("begin invoked");
         let tx = self
             .pool
             .start_transaction(TxOpts::default())
@@ -136,6 +160,7 @@ impl DatabaseTransaction for Client {
     }
 
     async fn commit(&self, tx_id: u64) -> Result<()> {
+        log::debug!("commit invoked: tx_id = {}", tx_id);
         match self.get_transaction(tx_id) {
             Some(tx) => Ok(tx.handle.commit().await?),
             None => Err(anyhow!("unknown transaction id: {}", tx_id)),
@@ -143,6 +168,7 @@ impl DatabaseTransaction for Client {
     }
 
     async fn rollback(&self, tx_id: u64) -> Result<()> {
+        log::debug!("rollback invoked: tx_id = {}", tx_id);
         match self.get_transaction(tx_id) {
             Some(tx) => Ok(tx.handle.rollback().await?),
             None => Err(anyhow!("unknown transaction id: {}", tx_id)),
@@ -150,6 +176,7 @@ impl DatabaseTransaction for Client {
     }
 
     async fn is_deadlock(&self, tx_id: u64) -> Result<bool> {
+        log::debug!("is_deadlock invoked: tx_id = {}", tx_id);
         match self.get_transaction(tx_id) {
             Some(tx) => {
                 let tx = scopeguard::guard(tx, |tx| {
@@ -167,17 +194,9 @@ impl DatabaseTransaction for Client {
         T: Into<CreateUserParams> + Send,
     {
         let params = params.into();
-        log::debug!("create_user: params = {:?}", params);
+        log::debug!("create_user: tx_id = {}, params = {:?}", tx_id, params);
 
-        let tx = self.get_transaction(tx_id);
-        if tx.is_none() {
-            return Err(anyhow!("unknown transaction id: {}", tx_id));
-        }
-        let tx = tx.unwrap();
-        let mut tx = scopeguard::guard(tx, |tx| {
-            self.put_transaction(tx);
-        });
-
+        let mut tx = self.get_transaction_guard(tx_id)?;
         let query = r"INSERT INTO `users` (`username`, `password`, `age`, `address`) VALUES (:username, :password, :age, :address)";
         tx.exec_drop(
             query,
@@ -208,17 +227,9 @@ impl DatabaseTransaction for Client {
         T: Into<GetUserParams> + Send,
     {
         let params = params.into();
-        log::debug!("get_user: id = {}", params.id);
+        log::debug!("get_user: tx_id = {}, id = {}", tx_id, params.id);
 
-        let tx = self.get_transaction(tx_id);
-        if tx.is_none() {
-            return Err(anyhow!("unknown transaction id: {}", tx_id));
-        }
-        let tx = tx.unwrap();
-        let mut tx = scopeguard::guard(tx, |tx| {
-            self.put_transaction(tx);
-        });
-
+        let mut tx = self.get_transaction_guard(tx_id)?;
         let query = r"SELECT `id`, `username`, `password`, `age`, `address` FROM `users` WHERE `id` = :id";
         let mut users = tx
             .exec_map(
