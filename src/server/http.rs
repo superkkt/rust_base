@@ -18,7 +18,6 @@ where
     T: DatabaseTransaction + Send + Sync + 'static,
 {
     let shared_state = Arc::new(AppState { controller });
-    // TODO: add delete_user
     let app = Router::new()
         .route("/api/v1/create_user", post(create_user))
         .route("/api/v1/get_user", post(get_user))
