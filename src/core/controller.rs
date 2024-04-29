@@ -1,4 +1,5 @@
 use crate::core::entity::CreateUserParams as EntityCreateUserParams;
+use crate::core::entity::GetUserParams as EntityGetUserParams;
 use crate::core::{DatabaseTransaction, User};
 use anyhow::{Context, Result};
 use futures::future::BoxFuture;
@@ -37,37 +38,22 @@ impl Into<EntityCreateUserParams> for CreateUserParams {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct GetUserParams {
+    pub id: u64,
+}
+
+impl Into<EntityGetUserParams> for GetUserParams {
+    fn into(self) -> EntityGetUserParams {
+        EntityGetUserParams { id: self.id }
+    }
+}
+
 const MAX_DEADLOCK_RETRY: usize = 5;
 
 impl<T: DatabaseTransaction + Send + Sync> Controller<T> {
     pub fn new(db: T) -> Self {
         Self { db }
-    }
-
-    pub async fn create_user<U>(&self, params: U) -> Result<User>
-    where
-        U: Into<CreateUserParams>,
-    {
-        let params = params.into();
-        let (tx_chan, rx_chan) = mpsc::channel();
-
-        let callback = constrain_callback(move |tx_id: u64, tx: &T| {
-            log::debug!("callback invoked");
-            // We need these clones because this callback is FnMut, which can be called
-            // multiple times. Otherwise, only the very first call for this callback will
-            // work.
-            let params = params.clone();
-            let tx_chan = tx_chan.clone();
-            let fut = async move {
-                let user = tx.create_user(tx_id, params).await?;
-                tx_chan.send(user)?;
-                Ok(())
-            };
-            Box::pin(fut) as BoxFuture<'_, Result<()>>
-        });
-        self.invoke(Box::new(callback)).await?;
-
-        Ok(rx_chan.recv()?)
     }
 
     async fn invoke(
@@ -106,7 +92,55 @@ impl<T: DatabaseTransaction + Send + Sync> Controller<T> {
         }
     }
 
-    pub async fn remove_user(&self, id: u64) -> Result<()> {
-        Ok(())
+    pub async fn create_user<U>(&self, params: U) -> Result<User>
+    where
+        U: Into<CreateUserParams>,
+    {
+        let params = params.into();
+        let (tx_chan, rx_chan) = mpsc::channel();
+
+        let callback = constrain_callback(move |tx_id: u64, tx: &T| {
+            log::debug!("callback invoked");
+            // We need these clones because this callback is FnMut, which can be called
+            // multiple times. Otherwise, only the very first call for this callback will
+            // work.
+            let params = params.clone();
+            let tx_chan = tx_chan.clone();
+            let fut = async move {
+                let user = tx.create_user(tx_id, params).await?;
+                tx_chan.send(user)?;
+                Ok(())
+            };
+            Box::pin(fut) as BoxFuture<'_, Result<()>>
+        });
+        self.invoke(Box::new(callback)).await?;
+
+        Ok(rx_chan.recv()?)
+    }
+
+    pub async fn get_user<U>(&self, params: U) -> Result<Option<User>>
+    where
+        U: Into<GetUserParams>,
+    {
+        let params = params.into();
+        let (tx_chan, rx_chan) = mpsc::channel();
+
+        let callback = constrain_callback(move |tx_id: u64, tx: &T| {
+            log::debug!("callback invoked");
+            // We need these clones because this callback is FnMut, which can be called
+            // multiple times. Otherwise, only the very first call for this callback will
+            // work.
+            let params = params.clone();
+            let tx_chan = tx_chan.clone();
+            let fut = async move {
+                let user = tx.get_user(tx_id, params).await?;
+                tx_chan.send(user)?;
+                Ok(())
+            };
+            Box::pin(fut) as BoxFuture<'_, Result<()>>
+        });
+        self.invoke(Box::new(callback)).await?;
+
+        Ok(rx_chan.recv()?)
     }
 }

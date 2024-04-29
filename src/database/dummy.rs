@@ -1,4 +1,4 @@
-use crate::core::entity::CreateUserParams;
+use crate::core::entity::{CreateUserParams, GetUserParams};
 use crate::core::{DatabaseTransaction, User};
 use anyhow::Result;
 use async_trait::async_trait;
@@ -37,7 +37,16 @@ impl DatabaseTransaction for Dummy {
         })
     }
 
-    async fn remove_user(&self, tx_id: u64, id: u64) -> Result<()> {
-        Ok(())
+    async fn get_user<T>(&self, tx_id: u64, id: T) -> Result<Option<User>>
+    where
+        T: Into<GetUserParams> + Send,
+    {
+        Ok(Some(User {
+            id: 0,
+            username: String::from(""),
+            password: String::from(""),
+            address: String::from(""),
+            age: 10,
+        }))
     }
 }

@@ -1,4 +1,5 @@
 use crate::core::controller::CreateUserParams as ControllerCreateUserParams;
+use crate::core::controller::GetUserParams as ControllerGetUserParams;
 use crate::core::{Controller, DatabaseTransaction, User};
 use anyhow::{Context, Result};
 use axum::extract::State;
@@ -20,6 +21,7 @@ where
     // TODO: add delete_user
     let app = Router::new()
         .route("/api/v1/create_user", post(create_user))
+        .route("/api/v1/get_user", post(get_user))
         .with_state(shared_state);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
@@ -80,6 +82,44 @@ where
         Err(err) => {
             log::error!("failed to create a user: {:?}", err);
             let response = CreateUserResponse { code: 500, user: None };
+            Json(response)
+        }
+    };
+}
+
+#[derive(Deserialize)]
+struct GetUserParams {
+    pub id: u64,
+}
+
+impl Into<ControllerGetUserParams> for GetUserParams {
+    fn into(self) -> ControllerGetUserParams {
+        ControllerGetUserParams { id: self.id }
+    }
+}
+
+#[derive(Serialize)]
+struct GetUserResponse {
+    code: u16,
+    user: Option<User>,
+}
+
+async fn get_user<T>(State(state): State<Arc<AppState<T>>>, Json(payload): Json<GetUserParams>) -> Json<GetUserResponse>
+where
+    T: DatabaseTransaction + Send + Sync,
+{
+    log::debug!("get_user invoked");
+    return match state.controller.get_user(payload).await {
+        Ok(user) => {
+            if user.is_none() {
+                Json(GetUserResponse { code: 300, user: None })
+            } else {
+                Json(GetUserResponse { code: 200, user })
+            }
+        }
+        Err(err) => {
+            log::error!("failed to get a user: {:?}", err);
+            let response = GetUserResponse { code: 500, user: None };
             Json(response)
         }
     };

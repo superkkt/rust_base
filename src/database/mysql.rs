@@ -1,11 +1,11 @@
-use crate::core::entity::CreateUserParams;
+use crate::core::entity::{CreateUserParams, GetUserParams};
 use crate::core::{DatabaseTransaction, User};
 use crate::database::Configuration;
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use futures::lock::Mutex;
-use mysql_async::prelude::{Queryable, StatementLike};
-use mysql_async::{params, Params, TxOpts};
+use mysql_async::prelude::{FromRow, Queryable, StatementLike};
+use mysql_async::{params, Params, Row, TxOpts};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -21,7 +21,7 @@ pub struct Client {
 #[derive(Debug)]
 struct Transaction {
     id: u64,
-    tx: mysql_async::Transaction<'static>,
+    handle: mysql_async::Transaction<'static>,
     deadlock: bool,
 }
 
@@ -31,15 +31,32 @@ impl Transaction {
         S: StatementLike + 'b,
         P: Into<Params> + Send + 'b,
     {
-        let v = self.tx.exec_drop(stmt, params).await;
+        let v = self.handle.exec_drop(stmt, params).await;
         if v.is_ok() {
             self.deadlock = false;
             return Ok(v?);
         }
-        self.process_error(v.unwrap_err())
+        Ok(self.process_error(v)?)
     }
 
-    fn process_error(&mut self, err: mysql_async::Error) -> Result<()> {
+    async fn exec_map<'a: 'b, 'b, T, S, P, U, F>(&'a mut self, stmt: S, params: P, f: F) -> Result<Vec<U>>
+    where
+        S: StatementLike + 'b,
+        P: Into<Params> + Send + 'b,
+        T: FromRow + Send + 'static,
+        F: FnMut(T) -> U + Send + 'a,
+        U: Send + 'a,
+    {
+        let v = self.handle.exec_map(stmt, params, f).await;
+        if v.is_ok() {
+            self.deadlock = false;
+            return Ok(v?);
+        }
+        Ok(self.process_error(v)?)
+    }
+
+    fn process_error<T>(&mut self, result: Result<T, mysql_async::Error>) -> Result<T, mysql_async::Error> {
+        let err = result.err().unwrap();
         let err_code = get_mysql_error_code(&err);
         if err_code.is_some() && err_code.unwrap() == MYSQL_DEADLOCK_ERROR_CODE {
             self.deadlock = true;
@@ -112,7 +129,7 @@ impl DatabaseTransaction for Client {
         let tx_id = self.counter.fetch_add(1, Ordering::SeqCst);
         self.put_transaction(Transaction {
             id: tx_id,
-            tx,
+            handle: tx,
             deadlock: false,
         });
         Ok(tx_id)
@@ -120,14 +137,14 @@ impl DatabaseTransaction for Client {
 
     async fn commit(&self, tx_id: u64) -> Result<()> {
         match self.get_transaction(tx_id) {
-            Some(tx) => Ok(tx.tx.commit().await?),
+            Some(tx) => Ok(tx.handle.commit().await?),
             None => Err(anyhow!("unknown transaction id: {}", tx_id)),
         }
     }
 
     async fn rollback(&self, tx_id: u64) -> Result<()> {
         match self.get_transaction(tx_id) {
-            Some(tx) => Ok(tx.tx.rollback().await?),
+            Some(tx) => Ok(tx.handle.rollback().await?),
             None => Err(anyhow!("unknown transaction id: {}", tx_id)),
         }
     }
@@ -152,37 +169,76 @@ impl DatabaseTransaction for Client {
         let params = params.into();
         log::debug!("create_user: params = {:?}", params);
 
-        match self.get_transaction(tx_id) {
-            Some(tx) => {
-                let mut tx = scopeguard::guard(tx, |tx| {
-                    self.put_transaction(tx);
-                });
-                // TODO: DB query.
-                let insert_query = r"INSERT INTO test (a, b) VALUES (:value1, :value2)";
-                let params = params! {
-                    "value1" => "Test Data 1",
-                    "value2" => "Test Data 2",
-                };
-                tx.exec_drop(insert_query, params).await?;
-
-                Ok(User {
-                    id: 18,
-                    username: String::from(""),
-                    password: String::from(""),
-                    age: 18,
-                    address: String::from(""),
-                })
-            }
-            None => Err(anyhow!("unknown transaction id: {}", tx_id)),
+        let tx = self.get_transaction(tx_id);
+        if tx.is_none() {
+            return Err(anyhow!("unknown transaction id: {}", tx_id));
         }
+        let tx = tx.unwrap();
+        let mut tx = scopeguard::guard(tx, |tx| {
+            self.put_transaction(tx);
+        });
+
+        let query = r"INSERT INTO `users` (`username`, `password`, `age`, `address`) VALUES (:username, :password, :age, :address)";
+        tx.exec_drop(
+            query,
+            params! {
+                "username" => &params.username,
+                "password" => &params.password,
+                "age" => params.age,
+                "address" => &params.address,
+            },
+        )
+        .await?;
+        let id = tx
+            .handle
+            .last_insert_id()
+            .expect("AUTO-INCREMENTed last inserted ID should exist");
+
+        Ok(User {
+            id,
+            username: params.username,
+            password: params.password,
+            age: params.age,
+            address: params.address,
+        })
     }
 
-    async fn remove_user(&self, tx_id: u64, id: u64) -> Result<()> {
-        log::debug!("remove_user: id = {id}");
+    async fn get_user<T>(&self, tx_id: u64, params: T) -> Result<Option<User>>
+    where
+        T: Into<GetUserParams> + Send,
+    {
+        let params = params.into();
+        log::debug!("get_user: id = {}", params.id);
 
-        // TODO: get tx from the map.
+        let tx = self.get_transaction(tx_id);
+        if tx.is_none() {
+            return Err(anyhow!("unknown transaction id: {}", tx_id));
+        }
+        let tx = tx.unwrap();
+        let mut tx = scopeguard::guard(tx, |tx| {
+            self.put_transaction(tx);
+        });
 
-        // TODO: DB query.
-        Ok(())
+        let query = r"SELECT `id`, `username`, `password`, `age`, `address` FROM `users` WHERE `id` = :id";
+        let mut users = tx
+            .exec_map(
+                query,
+                params! {
+                    "id" => params.id,
+                },
+                |row: Row| User {
+                    id: row.get("id").unwrap(),
+                    username: row.get("username").unwrap(),
+                    password: row.get("password").unwrap(),
+                    age: row.get("age").unwrap(),
+                    address: row.get("address").unwrap(),
+                },
+            )
+            .await?;
+        if users.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(users.remove(0)))
+        }
     }
 }

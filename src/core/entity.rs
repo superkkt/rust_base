@@ -12,7 +12,9 @@ pub trait DatabaseTransaction: Debug {
     async fn create_user<T>(&self, tx_id: u64, params: T) -> Result<User>
     where
         T: Into<CreateUserParams> + Send;
-    async fn remove_user(&self, tx_id: u64, id: u64) -> Result<()>;
+    async fn get_user<T>(&self, tx_id: u64, params: T) -> Result<Option<User>>
+    where
+        T: Into<GetUserParams> + Send;
 }
 
 #[derive(Debug)]
@@ -21,6 +23,11 @@ pub struct CreateUserParams {
     pub password: String,
     pub age: u16,
     pub address: String,
+}
+
+#[derive(Debug)]
+pub struct GetUserParams {
+    pub id: u64,
 }
 
 #[derive(Debug, Serialize)]
