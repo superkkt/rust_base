@@ -7,7 +7,7 @@ use std::fmt::Debug;
 use std::sync::mpsc;
 use std::time::Duration;
 
-pub struct Controller<T: DatabaseTransaction + Send + Sync> {
+pub struct Controller<T> {
     db: T,
 }
 

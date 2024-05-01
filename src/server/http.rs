@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-struct AppState<T: DatabaseTransaction + Send + Sync> {
+struct AppState<T> {
     controller: Controller<T>,
 }
 
