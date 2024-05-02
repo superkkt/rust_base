@@ -93,7 +93,7 @@ impl Client {
 
         loop {
             match self.map.try_lock() {
-                None => continue,
+                None => std::thread::yield_now(),
                 Some(mut map) => return map.remove(&tx_id),
             }
         }
