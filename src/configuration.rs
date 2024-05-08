@@ -1,9 +1,10 @@
-use anyhow::{Context, Result};
-use serde::de::{self, Visitor};
-use serde::{Deserialize, Deserializer};
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
+
+use anyhow::{Context, Result};
+use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer};
 
 const DEFAULT_CONFIG_FILE_PATH: &str = "/etc/rust_base.yaml";
 

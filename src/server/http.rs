@@ -1,13 +1,15 @@
 use crate::core::controller::CreateUserParams as ControllerCreateUserParams;
 use crate::core::controller::GetUserParams as ControllerGetUserParams;
 use crate::core::{Controller, DatabaseTransaction, User};
+
+use std::net::SocketAddr;
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use axum::extract::State;
 use axum::{routing::post, Json, Router};
 use axum_server::tls_rustls::RustlsConfig;
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
-use std::sync::Arc;
 
 struct AppState<T> {
     controller: Controller<T>,

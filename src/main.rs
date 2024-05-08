@@ -1,14 +1,12 @@
-mod configuration;
-mod core;
-mod database;
-mod logger;
-mod server;
+use rust_base::configuration;
+use rust_base::core::{Controller, DatabaseTransaction};
+use rust_base::database;
+use rust_base::database::dummy::Dummy;
+use rust_base::database::mysql;
+use rust_base::logger;
+use rust_base::server::http;
 
 use anyhow::{Context, Result};
-use core::{Controller, DatabaseTransaction};
-use database::dummy::Dummy;
-use database::mysql;
-use server::http;
 
 #[tokio::main]
 async fn main() -> Result<()> {

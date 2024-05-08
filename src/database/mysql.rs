@@ -1,16 +1,18 @@
 use crate::core::entity::{CreateUserParams, GetUserParams};
 use crate::core::{DatabaseTransaction, User};
 use crate::database::Configuration;
+
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use mysql_async::prelude::{FromRow, Queryable, StatementLike};
 use mysql_async::{params, Params, Row, TxOpts};
 use scopeguard::ScopeGuard;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 
 #[derive(Debug)]
 pub struct Client {

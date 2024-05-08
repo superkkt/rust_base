@@ -1,7 +1,8 @@
+use std::fmt::Debug;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::Serialize;
-use std::fmt::Debug;
 
 #[async_trait]
 pub trait DatabaseTransaction: Debug {

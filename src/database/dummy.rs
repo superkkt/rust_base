@@ -1,5 +1,6 @@
 use crate::core::entity::{CreateUserParams, GetUserParams};
 use crate::core::{DatabaseTransaction, User};
+
 use anyhow::Result;
 use async_trait::async_trait;
 

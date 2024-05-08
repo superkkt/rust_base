@@ -1,11 +1,13 @@
 use crate::core::entity::CreateUserParams as EntityCreateUserParams;
 use crate::core::entity::GetUserParams as EntityGetUserParams;
 use crate::core::{DatabaseTransaction, User};
-use anyhow::{Context, Result};
-use futures::future::BoxFuture;
+
 use std::fmt::Debug;
 use std::sync::mpsc;
 use std::time::Duration;
+
+use anyhow::{Context, Result};
+use futures::future::BoxFuture;
 
 pub struct Controller<T> {
     db: T,
