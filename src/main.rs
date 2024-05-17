@@ -1,5 +1,6 @@
 use rust_base::configuration;
-use rust_base::core::{Controller, DatabaseTransaction};
+use rust_base::core::controller::Controller;
+use rust_base::core::entity::DatabaseTransaction;
 use rust_base::database;
 use rust_base::database::dummy::Dummy;
 use rust_base::database::mysql;

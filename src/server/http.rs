@@ -1,6 +1,7 @@
+use crate::core::controller::Controller;
 use crate::core::controller::CreateUserParams as ControllerCreateUserParams;
 use crate::core::controller::GetUserParams as ControllerGetUserParams;
-use crate::core::{Controller, DatabaseTransaction, User};
+use crate::core::entity::{DatabaseTransaction, User};
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -29,14 +30,13 @@ where
     let config = RustlsConfig::from_pem_file(tls_cert_file, tls_key_file)
         .await
         .context(format!(
-            "failed to load TLS cert and key files: {}, {}",
-            tls_cert_file, tls_key_file
+            "failed to load TLS cert and key files: {tls_cert_file}, {tls_key_file}"
         ))?;
 
     Ok(axum_server::bind_rustls(addr, config)
         .serve(app.into_make_service())
         .await
-        .context(format!("failed to bind HTTP server: {}", addr))?)
+        .context(format!("failed to bind HTTP server: {addr}"))?)
 }
 
 #[derive(Deserialize)]
@@ -81,7 +81,7 @@ where
             Json(response)
         }
         Err(err) => {
-            log::error!("failed to create a user: {:?}", err);
+            log::error!("failed to create a user: {err:?}");
             let response = CreateUserResponse { code: 500, user: None };
             Json(response)
         }
@@ -119,7 +119,7 @@ where
             }
         }
         Err(err) => {
-            log::error!("failed to get a user: {:?}", err);
+            log::error!("failed to get a user: {err:?}");
             let response = GetUserResponse { code: 500, user: None };
             Json(response)
         }

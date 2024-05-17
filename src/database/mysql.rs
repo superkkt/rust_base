@@ -1,5 +1,4 @@
-use crate::core::entity::{CreateUserParams, GetUserParams};
-use crate::core::{DatabaseTransaction, User};
+use crate::core::entity::{CreateUserParams, DatabaseTransaction, GetUserParams, User};
 use crate::database::Configuration;
 
 use std::collections::HashMap;
@@ -91,7 +90,7 @@ impl Client {
     }
 
     fn get_transaction(&self, tx_id: u64) -> Option<Transaction> {
-        log::debug!("get_transaction invoked: tx_id = {}", tx_id);
+        log::debug!("get_transaction invoked: tx_id = {tx_id}");
 
         loop {
             match self.map.try_lock() {
@@ -105,14 +104,14 @@ impl Client {
         &self,
         tx_id: u64,
     ) -> Result<ScopeGuard<Transaction, Box<dyn FnOnce(Transaction) + Send + '_>>> {
-        log::debug!("get_transaction_guard invoked: tx_id = {}", tx_id);
+        log::debug!("get_transaction_guard invoked: tx_id = {tx_id}");
 
         match self.get_transaction(tx_id) {
-            None => Err(anyhow!("unknown transaction id: {}", tx_id)),
+            None => Err(anyhow!("unknown transaction id: {tx_id}")),
             Some(tx) => Ok(scopeguard::guard(
                 tx,
                 Box::new(move |tx| {
-                    log::debug!("scopeguard invoked: tx_id = {}", tx.id);
+                    log::debug!("scopeguard invoked: tx_id = {tx_id}");
                     self.put_transaction(tx);
                 }),
             )),
@@ -162,23 +161,23 @@ impl DatabaseTransaction for Client {
     }
 
     async fn commit(&self, tx_id: u64) -> Result<()> {
-        log::debug!("commit invoked: tx_id = {}", tx_id);
+        log::debug!("commit invoked: tx_id = {tx_id}");
         match self.get_transaction(tx_id) {
             Some(tx) => Ok(tx.handle.commit().await?),
-            None => Err(anyhow!("unknown transaction id: {}", tx_id)),
+            None => Err(anyhow!("unknown transaction id: {tx_id}")),
         }
     }
 
     async fn rollback(&self, tx_id: u64) -> Result<()> {
-        log::debug!("rollback invoked: tx_id = {}", tx_id);
+        log::debug!("rollback invoked: tx_id = {tx_id}");
         match self.get_transaction(tx_id) {
             Some(tx) => Ok(tx.handle.rollback().await?),
-            None => Err(anyhow!("unknown transaction id: {}", tx_id)),
+            None => Err(anyhow!("unknown transaction id: {tx_id}")),
         }
     }
 
     async fn is_deadlock(&self, tx_id: u64) -> Result<bool> {
-        log::debug!("is_deadlock invoked: tx_id = {}", tx_id);
+        log::debug!("is_deadlock invoked: tx_id = {tx_id}");
         match self.get_transaction(tx_id) {
             Some(tx) => {
                 let tx = scopeguard::guard(tx, |tx| {
@@ -187,7 +186,7 @@ impl DatabaseTransaction for Client {
                 let deadlock = tx.deadlock;
                 Ok(deadlock)
             }
-            None => Err(anyhow!("unknown transaction id: {}", tx_id)),
+            None => Err(anyhow!("unknown transaction id: {tx_id}")),
         }
     }
 
@@ -196,7 +195,7 @@ impl DatabaseTransaction for Client {
         T: Into<CreateUserParams> + Send,
     {
         let params = params.into();
-        log::debug!("create_user: tx_id = {}, params = {:?}", tx_id, params);
+        log::debug!("create_user: tx_id = {tx_id}, params = {params:?}");
 
         let mut tx = self.get_transaction_guard(tx_id)?;
         let query = r"INSERT INTO `users` (`username`, `password`, `age`, `address`) VALUES (:username, :password, :age, :address)";

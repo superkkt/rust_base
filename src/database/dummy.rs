@@ -1,5 +1,4 @@
-use crate::core::entity::{CreateUserParams, GetUserParams};
-use crate::core::{DatabaseTransaction, User};
+use crate::core::entity::{CreateUserParams, DatabaseTransaction, GetUserParams, User};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -13,19 +12,19 @@ impl DatabaseTransaction for Dummy {
         Ok(0)
     }
 
-    async fn commit(&self, tx_id: u64) -> Result<()> {
+    async fn commit(&self, _tx_id: u64) -> Result<()> {
         Ok(())
     }
 
-    async fn rollback(&self, tx_id: u64) -> Result<()> {
+    async fn rollback(&self, _tx_id: u64) -> Result<()> {
         Ok(())
     }
 
-    async fn is_deadlock(&self, tx_id: u64) -> Result<bool> {
+    async fn is_deadlock(&self, _tx_id: u64) -> Result<bool> {
         Ok(true)
     }
 
-    async fn create_user<T>(&self, tx_id: u64, params: T) -> Result<User>
+    async fn create_user<T>(&self, _tx_id: u64, _params: T) -> Result<User>
     where
         T: Into<CreateUserParams> + Send,
     {
@@ -38,7 +37,7 @@ impl DatabaseTransaction for Dummy {
         })
     }
 
-    async fn get_user<T>(&self, tx_id: u64, id: T) -> Result<Option<User>>
+    async fn get_user<T>(&self, _tx_id: u64, _id: T) -> Result<Option<User>>
     where
         T: Into<GetUserParams> + Send,
     {

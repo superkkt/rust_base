@@ -1,6 +1,6 @@
 use crate::core::entity::CreateUserParams as EntityCreateUserParams;
 use crate::core::entity::GetUserParams as EntityGetUserParams;
-use crate::core::{DatabaseTransaction, User};
+use crate::core::entity::{DatabaseTransaction, User};
 
 use std::fmt::Debug;
 use std::sync::mpsc;
