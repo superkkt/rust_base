@@ -16,7 +16,12 @@ struct AppState<T> {
     controller: Controller<T>,
 }
 
-pub async fn serve<T>(controller: Controller<T>, port: u16, tls_cert_file: &str, tls_key_file: &str) -> Result<()>
+pub async fn serve<T>(
+    controller: Controller<T>,
+    port: u16,
+    tls_cert_file: &str,
+    tls_key_file: &str,
+) -> Result<()>
 where
     T: DatabaseTransaction + Send + Sync + 'static,
 {
@@ -82,7 +87,10 @@ where
         }
         Err(err) => {
             log::error!("failed to create a user: {err:?}");
-            let response = CreateUserResponse { code: 500, user: None };
+            let response = CreateUserResponse {
+                code: 500,
+                user: None,
+            };
             Json(response)
         }
     };
@@ -105,7 +113,10 @@ struct GetUserResponse {
     user: Option<User>,
 }
 
-async fn get_user<T>(State(state): State<Arc<AppState<T>>>, Json(payload): Json<GetUserParams>) -> Json<GetUserResponse>
+async fn get_user<T>(
+    State(state): State<Arc<AppState<T>>>,
+    Json(payload): Json<GetUserParams>,
+) -> Json<GetUserResponse>
 where
     T: DatabaseTransaction + Send + Sync,
 {
@@ -113,14 +124,20 @@ where
     return match state.controller.get_user(payload).await {
         Ok(user) => {
             if user.is_none() {
-                Json(GetUserResponse { code: 300, user: None })
+                Json(GetUserResponse {
+                    code: 300,
+                    user: None,
+                })
             } else {
                 Json(GetUserResponse { code: 200, user })
             }
         }
         Err(err) => {
             log::error!("failed to get a user: {err:?}");
-            let response = GetUserResponse { code: 500, user: None };
+            let response = GetUserResponse {
+                code: 500,
+                user: None,
+            };
             Json(response)
         }
     };

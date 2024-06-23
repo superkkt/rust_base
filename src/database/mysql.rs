@@ -41,7 +41,12 @@ impl Transaction {
         Ok(self.process_error(v)?)
     }
 
-    async fn exec_map<'a: 'b, 'b, T, S, P, U, F>(&'a mut self, stmt: S, params: P, f: F) -> Result<Vec<U>>
+    async fn exec_map<'a: 'b, 'b, T, S, P, U, F>(
+        &'a mut self,
+        stmt: S,
+        params: P,
+        f: F,
+    ) -> Result<Vec<U>>
     where
         S: StatementLike + 'b,
         P: Into<Params> + Send + 'b,
@@ -57,7 +62,10 @@ impl Transaction {
         Ok(self.process_error(v)?)
     }
 
-    fn process_error<T>(&mut self, result: Result<T, mysql_async::Error>) -> Result<T, mysql_async::Error> {
+    fn process_error<T>(
+        &mut self,
+        result: Result<T, mysql_async::Error>,
+    ) -> Result<T, mysql_async::Error> {
         let err = result.err().unwrap();
         let err_code = get_mysql_error_code(&err);
         if err_code.is_some() && err_code.unwrap() == MYSQL_DEADLOCK_ERROR_CODE {
@@ -198,7 +206,8 @@ impl DatabaseTransaction for Client {
         log::debug!("create_user: tx_id = {tx_id}, params = {params:?}");
 
         let mut tx = self.get_transaction_guard(tx_id)?;
-        let query = r"INSERT INTO `users` (`username`, `password`, `age`, `address`) VALUES (:username, :password, :age, :address)";
+        let query = "INSERT INTO `users` (`username`, `password`, `age`, `address`) \
+                     VALUES (:username, :password, :age, :address)";
         tx.exec_drop(
             query,
             params! {
@@ -231,7 +240,8 @@ impl DatabaseTransaction for Client {
         log::debug!("get_user: tx_id = {}, id = {}", tx_id, params.id);
 
         let mut tx = self.get_transaction_guard(tx_id)?;
-        let query = r"SELECT `id`, `username`, `password`, `age`, `address` FROM `users` WHERE `id` = :id";
+        let query =
+            r"SELECT `id`, `username`, `password`, `age`, `address` FROM `users` WHERE `id` = :id";
         let mut users = tx
             .exec_map(
                 query,

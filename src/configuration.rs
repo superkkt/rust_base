@@ -39,11 +39,13 @@ pub struct HTTP {
 }
 
 pub fn load() -> Result<Configuration> {
-    let mut file = File::open(DEFAULT_CONFIG_FILE_PATH)
-        .context(format!("failed to open the config file: {DEFAULT_CONFIG_FILE_PATH}"))?;
+    let mut file = File::open(DEFAULT_CONFIG_FILE_PATH).context(format!(
+        "failed to open the config file: {DEFAULT_CONFIG_FILE_PATH}"
+    ))?;
     let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .context(format!("failed to load the config file: {DEFAULT_CONFIG_FILE_PATH}"))?;
+    file.read_to_string(&mut contents).context(format!(
+        "failed to load the config file: {DEFAULT_CONFIG_FILE_PATH}"
+    ))?;
     Ok(serde_yaml::from_str(&contents)?)
 }
 
@@ -66,7 +68,9 @@ impl Visitor<'_> for LogLevelVisitor {
             "info" => Ok(log::LevelFilter::Info),
             "warning" => Ok(log::LevelFilter::Warn),
             "error" => Ok(log::LevelFilter::Error),
-            _ => Err(E::custom(format!("unknown log::LevelFilter variant: {value}"))),
+            _ => Err(E::custom(format!(
+                "unknown log::LevelFilter variant: {value}"
+            ))),
         }
     }
 }
